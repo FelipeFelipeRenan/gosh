@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/FelipeFelipeRenan/gosh/internal/builtin"
 	"github.com/FelipeFelipeRenan/gosh/internal/executor"
 	"github.com/FelipeFelipeRenan/gosh/internal/parser"
 )
@@ -28,6 +29,15 @@ func main() {
 		}
 
 		args := parser.Parse(input)
+
+		handled, err := builtin.Exec(args)
+		if err != nil {
+			fmt.Println("erro no comando interno: ", err)
+			continue
+		}
+		if handled{
+			continue // comando interno executado, pula executor externo
+		}
 
 		if err := executor.Exec(args); err != nil{
 			fmt.Println("erro ao executar comando: ", err)
