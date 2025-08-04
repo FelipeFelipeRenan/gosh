@@ -1,13 +1,14 @@
 package executor
 
 import (
+	"errors"
 	"os"
 	"os/exec"
+	"syscall"
 )
 
-
-func Exec(args []string) error{
-	if len(args) == 0{
+func Exec(args []string) error {
+	if len(args) == 0 {
 		return nil
 	}
 
@@ -16,5 +17,17 @@ func Exec(args []string) error{
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	return cmd.Run()
+	err := cmd.Run()
+	if err != nil {
+		// ignora erros se forem causados por sinal de interrupção
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			status := exitErr.Sys().(syscall.WaitStatus)
+			if status.Signaled() && status.Signal() == syscall.SIGINT {
+				// comando interrompido com Ctrl+C
+				return nil
+			}
+		}
+	}
+	return err
 }
