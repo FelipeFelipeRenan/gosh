@@ -1,3 +1,4 @@
+// executor/executor.go
 package executor
 
 import (
@@ -6,6 +7,8 @@ import (
 	"os/exec"
 	"syscall"
 )
+
+var currentCmd *exec.Cmd
 
 func Exec(args []string) error {
 	if len(args) == 0 {
@@ -16,8 +19,13 @@ func Exec(args []string) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
+	currentCmd = cmd // guarda o cmd atual
+	
 	err := cmd.Run()
+	currentCmd = nil // limpa após a execução
+
 	if err != nil {
 		// ignora erros se forem causados por sinal de interrupção
 		var exitErr *exec.ExitError
@@ -30,4 +38,12 @@ func Exec(args []string) error {
 		}
 	}
 	return err
+}
+
+// Exposed para o signal handler
+func InterruptCurrentCommand()  {
+	if currentCmd != nil && currentCmd.Process != nil{
+		// envia o sinal SIGINT para o grupo de processos do comando
+		_ = syscall.Kill(-currentCmd.Process.Pid, syscall.SIGINT)
+	}
 }

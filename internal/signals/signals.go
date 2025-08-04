@@ -1,3 +1,4 @@
+// signals/signals.go
 package signals
 
 import (
@@ -5,6 +6,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/FelipeFelipeRenan/gosh/internal/executor"
 )
 
 func SetupSignalHandlers() {
@@ -18,6 +21,7 @@ func SetupSignalHandlers() {
 			switch sig {
 			case syscall.SIGINT:
 				// interrompe o comando em execução mas não fecha o shell
+				executor.InterruptCurrentCommand()
 				fmt.Print("\n(gosh) comando interrompido\n")
 			case syscall.SIGTSTP:
 				// ignora ctrl+z
