@@ -6,6 +6,8 @@ import (
 	"os/user"
 	"path/filepath"
 )
+var ErrExit = fmt.Errorf("exit requested")
+
 
 func Exec(args []string) (bool, error) {
 	if len(args) == 0 {
@@ -16,12 +18,11 @@ func Exec(args []string) (bool, error) {
 	case "cd":
 		return true, cd(args)
 	case "exit":
-		os.Exit(0)
+		return true, ErrExit
 	default:
 		return false, nil
 	}
-
-	return false, nil
+	//return false, nil
 }
 
 func cd(args []string) error {

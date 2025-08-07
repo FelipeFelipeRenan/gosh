@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/term"
 )
+
 func main() {
 	signals.SetupSignalHandlers()
 
@@ -33,7 +34,18 @@ func main() {
 	history := history.New()
 
 	for {
-		fmt.Printf("\r\ngosh | %s > ", usr.Username)
+
+		term.Restore(int(os.Stdin.Fd()), initialState)
+
+		fmt.Printf("\rgosh | %s > ", usr.Username)
+
+		// Reativa modo raw para leitura de teclas especiais
+
+		_, err := term.MakeRaw(int(os.Stdin.Fd()))
+		if err != nil {
+			fmt.Println("erro ao ativar modo raw:", err)
+			return
+		}
 
 		var input []rune
 		history.ResetPos()
@@ -79,7 +91,7 @@ func main() {
 					}
 				}
 			default:
-				fmt.Print(string(b))
+				fmt.Printf("%c", b)
 				input = append(input, rune(b))
 			}
 		}
@@ -94,6 +106,9 @@ func main() {
 
 		handled, err := builtin.Exec(args)
 		if err != nil {
+			if err == builtin.ErrExit{
+				return
+			}
 			fmt.Println("(gosh) erro no comando interno:", err)
 			continue
 		}
@@ -104,22 +119,19 @@ func main() {
 		// ⚠️ Restaura terminal antes de comando externo
 		term.Restore(int(os.Stdin.Fd()), initialState)
 
+		fmt.Println()
+
 		if err := executor.Exec(args); err != nil {
 			fmt.Println("(gosh) erro ao executar comando:", err)
 		}
 
-		// ⚠️ Reativa modo raw após execução
-		initialState, err = term.MakeRaw(int(os.Stdin.Fd()))
-		if err != nil {
-			fmt.Println("erro ao reativar modo raw:", err)
-			return
-		}
+		fmt.Println()
+
 	}
 }
-
 
 func clearLine(n int) {
-	for i := 0; i < n; i++ {
-		fmt.Print("\b \b")
-	}
+	fmt.Print("\033[2K\r")
+
 }
+

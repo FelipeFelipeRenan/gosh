@@ -1,4 +1,3 @@
-// executor/executor.go
 package executor
 
 import (
@@ -19,31 +18,39 @@ func Exec(args []string) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
 
-	currentCmd = cmd // guarda o cmd atual
-	
-	err := cmd.Run()
-	currentCmd = nil // limpa após a execução
+	currentCmd = cmd
 
-	if err != nil {
-		// ignora erros se forem causados por sinal de interrupção
+	if err := cmd.Start(); err != nil {
+		currentCmd = nil
+		return err
+	}
+
+	if err := cmd.Wait(); err != nil {
+		currentCmd = nil
+		
+		// Ignora erros de sinal SIGINT
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			status := exitErr.Sys().(syscall.WaitStatus)
-			if status.Signaled() && status.Signal() == syscall.SIGINT {
-				// comando interrompido com Ctrl+C
-				return nil
+			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
+				if status.Signaled() && status.Signal() == syscall.SIGINT {
+					return nil
+				}
 			}
 		}
+		return err
 	}
-	return err
+
+	currentCmd = nil
+	return nil
 }
 
-// Exposed para o signal handler
-func InterruptCurrentCommand()  {
-	if currentCmd != nil && currentCmd.Process != nil{
-		// envia o sinal SIGINT para o grupo de processos do comando
+func InterruptCurrentCommand() {
+	if currentCmd != nil && currentCmd.Process != nil {
+		// Envia SIGINT para todo o grupo de processos
 		_ = syscall.Kill(-currentCmd.Process.Pid, syscall.SIGINT)
 	}
 }
