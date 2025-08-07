@@ -1,30 +1,43 @@
 package history
 
-
 var commands []string
 var index int = -1
 
-func Add(command string)  {
-	if command != ""{
-		commands = append(commands, command)
-		index = len(command) // sempre depois do ultimo
-	}
+type History struct {
+	entries []string
+	pos     int
 }
 
-func Prev() string  {
-	if len(commands) == 0 || index <= 0{
-		return ""
-	}
-	index--
-	return commands[index]
+func New() *History {
+	return &History{}
 }
 
-func Next() string{
-	if len(commands) == 0 || index >= len(commands)-1{
-		index = len(commands)
+func (h *History) Add(command string) {
+	if command == ""{
+		return
+	}
+	h.entries = append(h.entries, command)
+	h.pos = len(h.entries)
+}
+
+func (h *History) Prev() string {
+	if len(h.entries) == 0 || h.pos <= 0 {
+		return ""
+	}
+	h.pos--
+	return h.entries[h.pos]
+}
+
+func (h *History) Next() string {
+	if len(h.entries) == 0 || h.pos >= len(h.entries)-1 {
+		h.pos = len(h.entries)
 		return ""
 	}
 
-	index++
-	return commands[index]
+	h.pos++
+	return h.entries[h.pos]
+}
+
+func (h *History) ResetPos(){
+	h.pos = len(h.entries)
 }
