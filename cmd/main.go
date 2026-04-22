@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/user"
@@ -23,27 +24,29 @@ func main() {
 		fmt.Println("erro de usuário: ", err)
 	}
 
-	// Ativa raw apenas uma vez
-	initialState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	// Salva o estado original do terminal APENAS UMA VEZ
+	fd := int(os.Stdin.Fd())
+	initialState, err := term.GetState(fd)
 	if err != nil {
-		fmt.Println("erro ao configurar terminal: ", err)
+		fmt.Println("erro ao obter estado do terminal: ", err)
 		return
 	}
-	defer term.Restore(int(os.Stdin.Fd()), initialState)
+	// Garante a restauração ao sair do programa
+	defer term.Restore(fd, initialState)
 
 	history := history.New()
 
 	for {
+		pwd, _ := os.Getwd()
 
-		term.Restore(int(os.Stdin.Fd()), initialState)
+		// 1. Garante que o terminal está normal para o prompt
+		term.Restore(fd, initialState)
+		fmt.Printf("gosh | %s at %s > ", usr.Username, pwd)
 
-		fmt.Printf("\rgosh | %s > ", usr.Username)
-
-		// Reativa modo raw para leitura de teclas especiais
-
-		_, err := term.MakeRaw(int(os.Stdin.Fd()))
+		// 2. Ativa modo Raw para leitura de teclas
+		rawState, err := term.MakeRaw(fd)
 		if err != nil {
-			fmt.Println("erro ao ativar modo raw:", err)
+			fmt.Printf("\r\n(gosh) erro ao ativar modo raw: %v\n", err)
 			return
 		}
 
@@ -55,46 +58,50 @@ func main() {
 			rb := make([]byte, 1)
 			_, err := os.Stdin.Read(rb)
 			if err != nil {
-				fmt.Println("(gosh) erro ao ler entrada:", err)
-				return
+				break readLoop
 			}
 			b := rb[0]
 
 			switch b {
 			case 3: // Ctrl+C
-				fmt.Println("^C")
 				input = nil
+				fmt.Print("^C\r\n")
 				break readLoop
-			case 13: // Enter
-				fmt.Println()
+			case 13: // Enter (Carriage Return)
+				fmt.Print("\r\n")
 				break readLoop
-			case 127: // Backspace
+			case 127, 8: // Backspace
 				if len(input) > 0 {
 					input = input[:len(input)-1]
-					fmt.Print("\b \b")
+					fmt.Print("\b \b") // Move volta, imprime espaço, move volta
 				}
-			case 27: // Escape sequence
+			case 27: // Escape sequences (Setas)
 				seq := make([]byte, 2)
 				os.Stdin.Read(seq)
 				if seq[0] == '[' {
 					switch seq[1] {
 					case 'A': // Up arrow
-						prev := history.Prev()
 						clearLine(len(input))
+						prev := history.Prev()
 						input = []rune(prev)
 						fmt.Print(string(input))
 					case 'B': // Down arrow
-						next := history.Next()
 						clearLine(len(input))
+						next := history.Next()
 						input = []rune(next)
 						fmt.Print(string(input))
 					}
 				}
 			default:
+				// CORREÇÃO AQUI: Use Printf para formatar o caractere
 				fmt.Printf("%c", b)
 				input = append(input, rune(b))
 			}
 		}
+
+		// 3. Restaura o terminal IMEDIATAMENTE após a leitura
+		term.Restore(fd, rawState)
+		term.Restore(fd, initialState)
 
 		cmd := strings.TrimSpace(string(input))
 		if cmd == "" {
@@ -104,34 +111,27 @@ func main() {
 
 		args := parser.Parse(cmd)
 
+		// Execução de comandos
 		handled, err := builtin.Exec(args)
 		if err != nil {
-			if err == builtin.ErrExit{
+			if errors.Is(err, builtin.ErrExit) {
 				return
 			}
-			fmt.Println("(gosh) erro no comando interno:", err)
-			continue
-		}
-		if handled {
+			fmt.Printf("(gosh) erro no comando interno: %v\n", err)
 			continue
 		}
 
-		// ⚠️ Restaura terminal antes de comando externo
-		term.Restore(int(os.Stdin.Fd()), initialState)
-
-		fmt.Println()
-
-		if err := executor.Exec(args); err != nil {
-			fmt.Println("(gosh) erro ao executar comando:", err)
+		if !handled {
+			if err := executor.Exec(args); err != nil {
+				fmt.Printf("(gosh) erro ao executar comando: %v\n", err)
+			}
 		}
-
-		fmt.Println()
-
 	}
 }
 
 func clearLine(n int) {
-	fmt.Print("\033[2K\r")
-
+	// Apaga os caracteres da tela movendo o cursor para trás e sobrescrevendo com espaços
+	for i := 0; i < n; i++ {
+		fmt.Print("\b \b")
+	}
 }
-
