@@ -13,6 +13,7 @@ import (
 	"github.com/FelipeFelipeRenan/gosh/internal/history"
 	"github.com/FelipeFelipeRenan/gosh/internal/parser"
 	"github.com/FelipeFelipeRenan/gosh/internal/signals"
+	"github.com/FelipeFelipeRenan/gosh/internal/trie"
 
 	"golang.org/x/term"
 )
@@ -33,19 +34,29 @@ func main() {
 		return
 	}
 	// Garante a restauração ao sair do programa
-	defer term.Restore(fd, initialState)
+	defer func(fd int, oldState *term.State) {
+		err := term.Restore(fd, oldState)
+		if err != nil {
+			fmt.Println("erro ao restore terminal state: ", err)
+		}
+	}(fd, initialState)
 
 	historyFile := ""
 	if usr != nil {
 		historyFile = filepath.Join(usr.HomeDir, ".gosh_history")
 	}
 	historyInstace := history.New(historyFile)
+	cmdTrie := trie.New()
+	loadBinariesIntoTrie(cmdTrie)
 
 	for {
 		pwd, _ := os.Getwd()
 
 		// 1. Garante que o terminal está normal para o prompt
-		term.Restore(fd, initialState)
+		err := term.Restore(fd, initialState)
+		if err != nil {
+			return
+		}
 		fmt.Printf("gosh | %s at %s > ", usr.Username, pwd)
 
 		// 2. Ativa modo Raw para leitura de teclas
@@ -72,6 +83,22 @@ func main() {
 				input = nil
 				fmt.Print("^C\r\n")
 				break readLoop
+			case 9:
+				prefix := string(input)
+				if prefix == "" {
+					continue
+				}
+				suggestions := cmdTrie.SearchPrefix(prefix)
+				if len(suggestions) == 1 {
+					clearLine(len(input))
+					input = []rune(suggestions[0])
+					fmt.Print(string(input))
+				} else if len(suggestions) > 1 {
+					// Várias sugestões: imprime-as abaixo (como o bash)
+					fmt.Printf("\r\n%s\r\n", strings.Join(suggestions, "  "))
+					// Mostra o prompt e o que já foi digitado novamente
+					fmt.Printf("gosh | %s at %s > %s", usr.Username, pwd, string(input))
+				}
 			case 13: // Enter (Carriage Return)
 				fmt.Print("\r\n")
 				break readLoop
@@ -82,7 +109,10 @@ func main() {
 				}
 			case 27: // Escape sequences (Setas)
 				seq := make([]byte, 2)
-				os.Stdin.Read(seq)
+				_, err2 := os.Stdin.Read(seq)
+				if err2 != nil {
+					return
+				}
 				if seq[0] == '[' {
 					switch seq[1] {
 					case 'A': // Up arrow
@@ -105,8 +135,14 @@ func main() {
 		}
 
 		// 3. Restaura o terminal IMEDIATAMENTE após a leitura
-		term.Restore(fd, rawState)
-		term.Restore(fd, initialState)
+		err = term.Restore(fd, rawState)
+		if err != nil {
+			return
+		}
+		err = term.Restore(fd, initialState)
+		if err != nil {
+			return
+		}
 
 		cmd := strings.TrimSpace(string(input))
 		if cmd == "" {
@@ -138,5 +174,22 @@ func clearLine(n int) {
 	// Apaga os caracteres da tela movendo o cursor para trás e sobrescrevendo com espaços
 	for i := 0; i < n; i++ {
 		fmt.Print("\b \b")
+	}
+}
+
+func loadBinariesIntoTrie(t *trie.Trie) {
+	pathVar := os.Getenv("PATH")
+	dirs := filepath.SplitList(pathVar)
+
+	for _, dir := range dirs {
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, file := range files {
+			if !file.IsDir() {
+				t.Insert(file.Name())
+			}
+		}
 	}
 }
