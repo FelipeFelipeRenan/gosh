@@ -5,11 +5,13 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+
+	"github.com/FelipeFelipeRenan/gosh/internal/history"
 )
+
 var ErrExit = fmt.Errorf("exit requested")
 
-
-func Exec(args []string) (bool, error) {
+func Exec(args []string, hist *history.History) (bool, error) {
 	if len(args) == 0 {
 		return false, nil
 	}
@@ -19,10 +21,19 @@ func Exec(args []string) (bool, error) {
 		return true, cd(args)
 	case "exit":
 		return true, ErrExit
+	case "history":
+		return true, showHistory(hist)
 	default:
 		return false, nil
 	}
 	//return false, nil
+}
+
+func showHistory(hist *history.History) error {
+	for i, cmd := range hist.ALl() {
+		fmt.Printf("  %3d : %s\n", i+1, cmd)
+	}
+	return nil
 }
 
 func cd(args []string) error {

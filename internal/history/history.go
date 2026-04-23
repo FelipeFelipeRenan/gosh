@@ -91,3 +91,7 @@ func (h *History) Next() string {
 func (h *History) ResetPos() {
 	h.pos = len(h.entries)
 }
+
+func (h *History) ALl() []string {
+	return h.entries
+}

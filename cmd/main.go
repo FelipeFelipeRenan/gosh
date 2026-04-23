@@ -117,7 +117,7 @@ func main() {
 		args := parser.Parse(cmd)
 
 		// Execução de comandos
-		handled, err := builtin.Exec(args)
+		handled, err := builtin.Exec(args, historyInstace)
 		if err != nil {
 			if errors.Is(err, builtin.ErrExit) {
 				return
