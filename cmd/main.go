@@ -47,7 +47,7 @@ func main() {
 	}
 	historyInstace := history.New(historyFile)
 	cmdTrie := trie.New()
-	loadBinariesIntoTrie(cmdTrie)
+	go loadBinariesIntoTrie(cmdTrie)
 
 	for {
 		pwd, _ := os.Getwd()
@@ -84,20 +84,33 @@ func main() {
 				fmt.Print("^C\r\n")
 				break readLoop
 			case 9:
-				prefix := string(input)
-				if prefix == "" {
-					continue
+				line := string(input)
+				parts := strings.Fields(line)
+
+				isCommand := len(parts) == 0 || (len(parts) == 1 && !strings.HasSuffix(line, " "))
+
+				var suggestions []string
+				var currentWord string
+
+				if isCommand {
+					currentWord = line
+					suggestions = cmdTrie.SearchPrefix(currentWord)
+				} else {
+					currentWord = parts[len(parts)-1]
+					if strings.HasSuffix(line, " ") {
+						currentWord = ""
+					}
+					suggestions = getFileSuggestions(currentWord)
 				}
-				suggestions := cmdTrie.SearchPrefix(prefix)
 				if len(suggestions) == 1 {
-					clearLine(len(input))
-					input = []rune(suggestions[0])
-					fmt.Print(string(input))
+					toAppend := suggestions[0][len(currentWord):]
+					input = append(input, []rune(toAppend)...)
+					fmt.Print(toAppend)
 				} else if len(suggestions) > 1 {
 					// Várias sugestões: imprime-as abaixo (como o bash)
-					fmt.Printf("\r\n%s\r\n", strings.Join(suggestions, "  "))
-					// Mostra o prompt e o que já foi digitado novamente
-					fmt.Printf("gosh | %s at %s > %s", usr.Username, pwd, string(input))
+					fmt.Print("\r\n")
+					printCompact(suggestions)
+					fmt.Printf("\r\ngosh | %s at %s > %s", usr.Username, pwd, string(input))
 				}
 			case 13: // Enter (Carriage Return)
 				fmt.Print("\r\n")
@@ -190,6 +203,35 @@ func loadBinariesIntoTrie(t *trie.Trie) {
 			if !file.IsDir() {
 				t.Insert(file.Name())
 			}
+		}
+	}
+}
+
+func getFileSuggestions(prefix string) []string {
+	files, err := os.ReadDir(".")
+	if err != nil {
+		return nil
+	}
+	var result []string
+	for _, file := range files {
+		if strings.HasPrefix(file.Name(), prefix) {
+			name := file.Name()
+			if file.IsDir() {
+				name += string("/")
+			}
+			result = append(result, name)
+		}
+	}
+	return result
+}
+
+func printCompact(suggestions []string) {
+	// Organiza em colunas simples para não poluir
+	// Você pode evoluir isso para calcular a largura do terminal depois
+	for i, s := range suggestions {
+		fmt.Printf("%-20s", s) // Reserva 20 espaços por item
+		if (i+1)%4 == 0 {      // Quebra linha a cada 4 itens
+			fmt.Print("\r\n")
 		}
 	}
 }
