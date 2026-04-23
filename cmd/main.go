@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strings"
 
 	"github.com/FelipeFelipeRenan/gosh/internal/builtin"
@@ -34,7 +35,11 @@ func main() {
 	// Garante a restauração ao sair do programa
 	defer term.Restore(fd, initialState)
 
-	history := history.New()
+	historyFile := ""
+	if usr != nil {
+		historyFile = filepath.Join(usr.HomeDir, ".gosh_history")
+	}
+	historyInstace := history.New(historyFile)
 
 	for {
 		pwd, _ := os.Getwd()
@@ -51,7 +56,7 @@ func main() {
 		}
 
 		var input []rune
-		history.ResetPos()
+		historyInstace.ResetPos()
 
 	readLoop:
 		for {
@@ -82,12 +87,12 @@ func main() {
 					switch seq[1] {
 					case 'A': // Up arrow
 						clearLine(len(input))
-						prev := history.Prev()
+						prev := historyInstace.Prev()
 						input = []rune(prev)
 						fmt.Print(string(input))
 					case 'B': // Down arrow
 						clearLine(len(input))
-						next := history.Next()
+						next := historyInstace.Next()
 						input = []rune(next)
 						fmt.Print(string(input))
 					}
@@ -107,7 +112,7 @@ func main() {
 		if cmd == "" {
 			continue
 		}
-		history.Add(cmd)
+		historyInstace.Add(cmd)
 
 		args := parser.Parse(cmd)
 
