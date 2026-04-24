@@ -57,7 +57,9 @@ func main() {
 		if err != nil {
 			return
 		}
-		fmt.Printf("gosh | %s at %s > ", usr.Username, pwd)
+
+		promptStr := fmt.Sprintf("gosh | %s at %s > ", usr.Username, pwd)
+		fmt.Print(promptStr)
 
 		// 2. Ativa modo Raw para leitura de teclas
 		rawState, err := term.MakeRaw(fd)
@@ -68,6 +70,7 @@ func main() {
 
 		var input []rune
 		historyInstace.ResetPos()
+		var currentSuggestion string
 
 	readLoop:
 		for {
@@ -118,7 +121,8 @@ func main() {
 			case 127, 8: // Backspace
 				if len(input) > 0 {
 					input = input[:len(input)-1]
-					fmt.Print("\b \b") // Move volta, imprime espaço, move volta
+					currentSuggestion = historyInstace.FindLastByPrefix(string(input))
+					renderLine(promptStr, input, currentSuggestion)
 				}
 			case 27: // Escape sequences (Setas)
 				seq := make([]byte, 2)
@@ -129,21 +133,28 @@ func main() {
 				if seq[0] == '[' {
 					switch seq[1] {
 					case 'A': // Up arrow
-						clearLine(len(input))
 						prev := historyInstace.Prev()
 						input = []rune(prev)
-						fmt.Print(string(input))
+						currentSuggestion = ""
+						renderLine(promptStr, input, currentSuggestion)
 					case 'B': // Down arrow
-						clearLine(len(input))
 						next := historyInstace.Next()
 						input = []rune(next)
-						fmt.Print(string(input))
+						currentSuggestion = ""
+						renderLine(promptStr, input, currentSuggestion)
+					case 'C':
+						if currentSuggestion != "" && len(currentSuggestion) > len(input) {
+							input = []rune(currentSuggestion)
+							currentSuggestion = ""
+							renderLine(promptStr, input, currentSuggestion)
+						}
 					}
 				}
 			default:
-				// CORREÇÃO AQUI: Use Printf para formatar o caractere
-				fmt.Printf("%c", b)
 				input = append(input, rune(b))
+
+				currentSuggestion = historyInstace.FindLastByPrefix(string(input))
+				renderLine(promptStr, input, currentSuggestion)
 			}
 		}
 
@@ -233,5 +244,25 @@ func printCompact(suggestions []string) {
 		if (i+1)%4 == 0 {      // Quebra linha a cada 4 itens
 			fmt.Print("\r\n")
 		}
+	}
+}
+
+func renderLine(prompt string, input []rune, suggestion string) {
+	// \033[2K limpa a linha inteira, \r volta pro começo
+	fmt.Print("\033[2K\r")
+
+	// Imprime o prompt e o que o usuário realmente digitou
+	fmt.Print(prompt + string(input))
+
+	// Se temos uma sugestão do histórico maior que o input
+	if suggestion != "" && len(suggestion) > len(input) {
+		remainder := suggestion[len(input):]
+
+		// \033[90m é a cor cinza (faint), \033[0m reseta a cor
+		fmt.Printf("\033[90m%s\033[0m", remainder)
+
+		// Volta o cursor para a esquerda, para ficar logo após o input real do usuário
+		// \033[ND move N colunas para a esquerda
+		fmt.Printf("\033[%dD", len(remainder))
 	}
 }
