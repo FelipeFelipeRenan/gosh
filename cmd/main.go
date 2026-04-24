@@ -116,6 +116,7 @@ func main() {
 					fmt.Printf("\r\ngosh | %s at %s > %s", usr.Username, pwd, string(input))
 				}
 			case 13: // Enter (Carriage Return)
+				renderLine(promptStr, input, "")
 				fmt.Print("\r\n")
 				break readLoop
 			case 127, 8: // Backspace
