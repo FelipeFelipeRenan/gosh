@@ -95,3 +95,16 @@ func (h *History) ResetPos() {
 func (h *History) ALl() []string {
 	return h.entries
 }
+
+func (h *History) FindLastByPrefix(prefix string) string {
+	if prefix == "" {
+		return ""
+	}
+
+	for i := len(h.entries) - 1; i >= 0; i-- {
+		if strings.HasPrefix(h.entries[i], prefix) {
+			return h.entries[i]
+		}
+	}
+	return ""
+}
